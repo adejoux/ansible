@@ -67,6 +67,13 @@ options:
   pvs:
     description:
     - Comma separated list of physical volumes e.g. hdisk1,hdisk2
+  shrink:
+    version_added: "2.4"
+    description:
+    - shrink if current size is higher than size requested
+    required: false
+    default: yes
+
 '''
 
 EXAMPLES = '''
@@ -110,12 +117,19 @@ EXAMPLES = '''
     lv: test4lv
     size: 1200M
 
-
 # Remove the logical volume.
 - aix_lvol:
     vg: testvg
     lv: testlv
     state: absent
+
+# Set the logical volume to 512M and do not try to shrink if size is lower than current one
+- aix_lvol: 
+    vg=testvg 
+    lv=testlv 
+    size=512M 
+    shrink=no
+
 '''
 
 RETURN = '''
@@ -215,6 +229,7 @@ def main():
             opts=dict(default='', type='str'),
             copies=dict(default='1', type='str'),
             state=dict(choices=["absent", "present"], default='present'),
+            shrink=dict(type='bool', default='yes'),
             policy=dict(choices=["maximum", "minimum"], default='maximum'),
             pvs=dict(type='list', default=list())
         ),
@@ -229,6 +244,7 @@ def main():
     copies = module.params['copies']
     policy = module.params['policy']
     state = module.params['state']
+    shrink = module.boolean(module.params['shrink'])
     pvs = module.params['pvs']
 
     pv_list = ' '.join(pvs)
@@ -328,10 +344,10 @@ def main():
                     module.exit_json(changed=True, msg="Logical volume %s size extended to %sMB." % (lv, lv_size))
                 else:
                     module.fail_json(msg="Unable to resize %s to %sMB." % (lv, lv_size), rc=rc, out=out, err=err)
-            elif lv_size < this_lv['size']:
+            elif shrink and lv_size < this_lv['size']:
                 module.fail_json(msg="No shrinking of Logical Volume %s permitted. Current size: %s MB" % (lv, this_lv['size']))
             else:
-                module.exit_json(changed=False, msg="Logical volume %s size is already %sMB." % (lv, lv_size))
+                module.exit_json(changed=False, msg="Logical volume %s size is already %sMB or higher." % (lv, lv_size))
 
 
 if __name__ == '__main__':
